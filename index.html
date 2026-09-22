@@ -1,0 +1,690 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Patch</title>
+<meta name="description" content="A modular synthesiser in the browser. Drag modules onto the rack, run cables between them, and the audio graph rewires itself live." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Roboto+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+<style>
+:root{
+  --room:#c9cdd2; --rail:#9aa1a8; --panel:#eef0f2; --panel2:#e2e5e8;
+  --etch:#b5bbc1; --deep:#8d959d;
+  --ink:#1c2024; --sub:#5c646c; --faint:#8b939b;
+  --audio:#e8552f; --cv:#2f7de8; --trig:#e8b32f;
+  --a:"Archivo",system-ui,sans-serif;
+  --m:"Roboto Mono",ui-monospace,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--room);color:var(--ink);font-family:var(--a);-webkit-font-smoothing:antialiased;
+  background-image:linear-gradient(180deg,#d6dade 0%,#bcc2c8 100%);min-height:100vh;padding:0 16px 40px}
+.wrap{max-width:1260px;margin:0 auto}
+
+header{display:flex;align-items:flex-end;gap:18px;flex-wrap:wrap;padding:26px 2px 16px}
+h1{font-family:var(--a);font-weight:700;font-size:30px;letter-spacing:-.02em;margin:0;text-transform:uppercase}
+h1 span{color:var(--audio)}
+.sub{font-size:13.5px;color:var(--sub);max-width:52ch;line-height:1.5;margin:5px 0 0}
+.plate{margin-left:auto;font-family:var(--m);font-size:10.5px;letter-spacing:.16em;color:var(--sub);
+  background:linear-gradient(180deg,#f2f4f6,#dfe3e6);border:1px solid var(--deep);border-radius:3px;padding:7px 12px;
+  box-shadow:0 1px 0 #fff inset,0 1px 2px rgba(0,0,0,.18)}
+
+.toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;
+  background:linear-gradient(180deg,#aab1b8,#959da5);border:1px solid #7d858d;border-radius:8px;padding:9px 11px;
+  box-shadow:0 1px 0 rgba(255,255,255,.45) inset,0 6px 14px -8px rgba(0,0,0,.6)}
+button{font-family:var(--m);font-size:11px;font-weight:500;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--ink);background:linear-gradient(180deg,#f4f6f7,#dde1e5);border:1px solid #858d95;border-radius:4px;
+  padding:8px 12px;cursor:pointer;box-shadow:0 1px 0 #fff inset,0 2px 0 -1px rgba(0,0,0,.28)}
+button:hover{background:linear-gradient(180deg,#fff,#e6eaed)}
+button:active{transform:translateY(1px);box-shadow:0 1px 2px rgba(0,0,0,.25) inset}
+button.go{background:linear-gradient(180deg,#f2704e,#d8431f);color:#fff;border-color:#a8341a;text-shadow:0 1px 0 rgba(0,0,0,.25)}
+button.go.on{background:linear-gradient(180deg,#4fbf7a,#2f9d59);border-color:#237a44}
+.tsep{width:1px;height:26px;background:#7d858d;margin:0 3px}
+.hint{font-family:var(--m);font-size:10.5px;color:#39424a;letter-spacing:.04em;margin-left:auto}
+
+/* --- the rack --- */
+#rack{position:relative;margin-top:14px;height:612px;overflow:hidden;border-radius:10px;
+  background:
+    repeating-linear-gradient(180deg,#8f969d 0 3px,#868e95 3px 6px),
+    linear-gradient(180deg,#9aa1a8,#858d95);
+  border:1px solid #6e767e;box-shadow:0 10px 30px -18px rgba(0,0,0,.8),0 1px 0 rgba(255,255,255,.3) inset}
+#cables{position:absolute;inset:0;pointer-events:none;z-index:5}
+.mod{position:absolute;width:186px;background:linear-gradient(180deg,var(--panel),var(--panel2));
+  border:1px solid var(--deep);border-radius:5px;user-select:none;z-index:2;
+  box-shadow:0 1px 0 #fff inset,0 10px 18px -12px rgba(0,0,0,.75),0 1px 3px rgba(0,0,0,.28)}
+.mod.sel{border-color:var(--audio);box-shadow:0 0 0 2px rgba(232,85,47,.35),0 10px 18px -12px rgba(0,0,0,.75)}
+.mod header{display:flex;align-items:center;gap:6px;padding:7px 9px 6px;cursor:grab;border-bottom:1px solid var(--etch);
+  background:linear-gradient(180deg,#f7f8f9,#e7eaed);border-radius:4px 4px 0 0}
+.mod header b{font-family:var(--a);font-weight:700;font-size:11.5px;letter-spacing:.14em;text-transform:uppercase}
+.mod header .x{margin-left:auto;font-family:var(--m);font-size:12px;color:var(--faint);cursor:pointer;padding:0 2px}
+.mod header .x:hover{color:var(--audio)}
+.body{padding:9px}
+.ctl{margin-bottom:8px}
+.ctl label{display:flex;justify-content:space-between;font-family:var(--m);font-size:9px;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--sub);margin-bottom:3px}
+.ctl label b{color:var(--ink);font-weight:500}
+input[type=range]{width:100%;height:14px;accent-color:var(--audio);background:transparent;margin:0}
+select{width:100%;font-family:var(--m);font-size:10.5px;padding:4px 5px;border:1px solid var(--etch);background:#fff;border-radius:3px;color:var(--ink)}
+.ports{display:flex;justify-content:space-between;gap:8px;padding:7px 9px 9px;border-top:1px solid var(--etch);background:#e7eaed;border-radius:0 0 4px 4px}
+.pcol{display:flex;flex-direction:column;gap:6px}
+.pcol.out{align-items:flex-end}
+.port{display:flex;align-items:center;gap:5px;font-family:var(--m);font-size:8.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--sub)}
+.pcol.out .port{flex-direction:row-reverse}
+.jack{width:15px;height:15px;border-radius:50%;
+  background:radial-gradient(circle at 36% 33%,#59626b,#2a3036 62%,#14181c);
+  border:1.5px solid #7f878f;cursor:crosshair;flex:none;box-shadow:0 1px 0 #fff}
+.jack:hover{border-color:var(--audio)}
+.jack.lit{border-color:var(--audio);box-shadow:0 0 0 2px rgba(232,85,47,.3)}
+.jack[data-kind=cv]:hover,.jack.lit[data-kind=cv]{border-color:var(--cv);box-shadow:0 0 0 2px rgba(47,125,232,.3)}
+.jack[data-kind=trig]:hover,.jack.lit[data-kind=trig]{border-color:var(--trig)}
+.seq{display:grid;grid-template-columns:repeat(8,1fr);gap:3px;margin-bottom:7px}
+.seq button{padding:0;height:26px;font-size:9px;letter-spacing:0;border-radius:2px;line-height:1}
+.seq button.on{background:linear-gradient(180deg,#ffd97a,#e8b32f);border-color:#b8871a}
+.seq button.cur{outline:2px solid var(--audio);outline-offset:-2px}
+canvas.scope{width:100%;height:52px;display:block;background:#12171c;border:1px solid var(--deep);border-radius:3px}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-family:var(--m);font-size:10.5px;color:#39424a;margin-top:11px;padding:0 2px}
+.legend i{display:inline-block;width:14px;height:3px;vertical-align:3px;margin-right:6px;border-radius:2px}
+footer{font-family:var(--m);font-size:11.5px;color:#454e56;margin-top:16px;padding:12px 2px 0;border-top:1px solid var(--rail);line-height:1.7}
+footer a{color:#242b31}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div>
+    <h1>PAT<span>CH</span></h1>
+    <p class="sub">A modular synthesiser. Drag modules around the rack, pull cables between jacks, and the Web Audio graph rewires itself underneath you while it runs.</p>
+  </div>
+  <span class="plate">WEB AUDIO · LIVE REPATCH</span>
+</header>
+
+<div class="toolbar">
+  <button class="go" id="power">Power</button>
+  <div class="tsep"></div>
+  <select id="add" style="width:auto;font-size:11px;padding:7px 8px"></select>
+  <button id="addbtn">Add module</button>
+  <div class="tsep"></div>
+  <button id="p1">Init patch</button>
+  <button id="p2">Acid line</button>
+  <button id="p3">Drone</button>
+  <button id="p4">Bell</button>
+  <div class="tsep"></div>
+  <button id="clear">Clear cables</button>
+  <span class="hint" id="hint">drag a jack to another jack to patch · click a cable to cut it</span>
+</div>
+
+<div id="rack">
+  <svg id="cables"></svg>
+</div>
+
+<div class="legend">
+  <span><i style="background:#e8552f"></i>audio</span>
+  <span><i style="background:#2f7de8"></i>control voltage</span>
+  <span><i style="background:#e8b32f"></i>trigger</span>
+  <span id="count">0 modules · 0 cables</span>
+</div>
+
+<footer>
+  Built by <a href="https://bxzex.com">bxzex</a>. Every cable is a real connection in the Web Audio graph, control voltage included: a CV jack connects straight to the AudioParam it modulates, the way voltage does in hardware.
+  <a href="https://github.com/bxzex/patch">Source on GitHub</a>.
+</footer>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const rack = $("rack"), svg = $("cables");
+let ac = null, master = null, running = false;
+
+/* =====================================================================
+   Modules. Each one owns its audio nodes and declares its jacks.
+   An input jack resolves to either an AudioNode or an AudioParam, which
+   is the whole trick: patching CV is literally connect(param).
+   ===================================================================== */
+const DEFS = {};
+function def(type, label, build){ DEFS[type] = { type, label, build }; }
+
+const noteName = n => ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"][((n%12)+12)%12] + (Math.floor(n/12)-1);
+
+def("osc", "Oscillator", m => {
+  const o = ac.createOscillator();
+  const amp = ac.createGain(); amp.gain.value = 0.35;
+  o.connect(amp); o.start();
+  m.nodes = { o, amp };
+  m.controls = [
+    { id:"wave", kind:"select", label:"shape", options:["sawtooth","square","triangle","sine"],
+      apply:v => o.type = v },
+    { id:"freq", kind:"range", label:"pitch", min:24, max:96, step:1, value:45,
+      fmt:v => noteName(v), apply:v => o.frequency.setTargetAtTime(440*Math.pow(2,(v-69)/12), ac.currentTime, 0.01) },
+    { id:"fine", kind:"range", label:"fine", min:-100, max:100, step:1, value:0,
+      fmt:v => v+" ct", apply:v => o.detune.setTargetAtTime(v, ac.currentTime, 0.01) },
+    { id:"lvl", kind:"range", label:"level", min:0, max:1, step:0.01, value:0.35,
+      fmt:v => (v*100).toFixed(0)+"%", apply:v => amp.gain.setTargetAtTime(v, ac.currentTime, 0.01) },
+  ];
+  m.ins  = [{ id:"fm", label:"fm", kind:"cv", target:() => o.detune }];
+  m.outs = [{ id:"out", label:"out", kind:"audio", node:() => amp }];
+});
+
+def("noise", "Noise", m => {
+  const len = ac.sampleRate*2, buf = ac.createBuffer(1, len, ac.sampleRate), d = buf.getChannelData(0);
+  for(let i=0;i<len;i++) d[i] = Math.random()*2-1;
+  const s = ac.createBufferSource(); s.buffer = buf; s.loop = true; s.start();
+  const g = ac.createGain(); g.gain.value = 0.25; s.connect(g);
+  m.nodes = { s, g };
+  m.controls = [{ id:"lvl", kind:"range", label:"level", min:0, max:1, step:0.01, value:0.25,
+    fmt:v => (v*100).toFixed(0)+"%", apply:v => g.gain.setTargetAtTime(v, ac.currentTime, 0.01) }];
+  m.ins = [];
+  m.outs = [{ id:"out", label:"out", kind:"audio", node:() => g }];
+});
+
+def("lfo", "LFO", m => {
+  const o = ac.createOscillator(); o.frequency.value = 2; o.start();
+  const depth = ac.createGain(); depth.gain.value = 300;
+  o.connect(depth);
+  m.nodes = { o, depth };
+  m.controls = [
+    { id:"wave", kind:"select", label:"shape", options:["sine","triangle","square","sawtooth"], apply:v => o.type = v },
+    { id:"rate", kind:"range", label:"rate", min:-2, max:1.4, step:0.01, value:0.3,
+      fmt:v => Math.pow(10,v).toFixed(2)+" Hz", apply:v => o.frequency.setTargetAtTime(Math.pow(10,v), ac.currentTime, 0.01) },
+    { id:"amt", kind:"range", label:"depth", min:0, max:2000, step:1, value:300,
+      fmt:v => v, apply:v => depth.gain.setTargetAtTime(v, ac.currentTime, 0.01) },
+  ];
+  m.ins = [];
+  m.outs = [{ id:"out", label:"cv", kind:"cv", node:() => depth }];
+});
+
+def("filter", "Filter", m => {
+  const f = ac.createBiquadFilter();
+  f.type = "lowpass"; f.frequency.value = 900; f.Q.value = 8;
+  m.nodes = { f };
+  m.controls = [
+    { id:"type", kind:"select", label:"type", options:["lowpass","highpass","bandpass","notch"], apply:v => f.type = v },
+    { id:"cut", kind:"range", label:"cutoff", min:1.4, max:4.32, step:0.01, value:2.95,
+      fmt:v => Math.round(Math.pow(10,v))+" Hz", apply:v => f.frequency.setTargetAtTime(Math.pow(10,v), ac.currentTime, 0.008) },
+    { id:"q", kind:"range", label:"resonance", min:0.1, max:24, step:0.1, value:8,
+      fmt:v => (+v).toFixed(1), apply:v => f.Q.setTargetAtTime(v, ac.currentTime, 0.01) },
+  ];
+  m.ins  = [{ id:"in", label:"in", kind:"audio", target:() => f },
+            { id:"cut", label:"cut", kind:"cv", target:() => f.frequency }];
+  m.outs = [{ id:"out", label:"out", kind:"audio", node:() => f }];
+});
+
+def("vca", "VCA", m => {
+  const g = ac.createGain(); g.gain.value = 0.0;
+  m.nodes = { g };
+  m.controls = [{ id:"bias", kind:"range", label:"bias", min:0, max:1, step:0.01, value:0,
+    fmt:v => (+v).toFixed(2), apply:v => g.gain.setTargetAtTime(+v, ac.currentTime, 0.01) }];
+  m.ins  = [{ id:"in", label:"in", kind:"audio", target:() => g },
+            { id:"cv", label:"cv", kind:"cv", target:() => g.gain }];
+  m.outs = [{ id:"out", label:"out", kind:"audio", node:() => g }];
+});
+
+def("env", "Envelope", m => {
+  // a ConstantSource is the cleanest CV generator the API gives you
+  const cs = ac.createConstantSource(); cs.offset.value = 0; cs.start();
+  const amt = ac.createGain(); amt.gain.value = 1; cs.connect(amt);
+  m.nodes = { cs, amt };
+  m.state = { a:0.01, d:0.18, s:0.25, r:0.3 };
+  m.controls = [
+    { id:"a", kind:"range", label:"attack",  min:0.001, max:1, step:0.001, value:0.01, fmt:v => (v*1000).toFixed(0)+" ms", apply:v => m.state.a = +v },
+    { id:"d", kind:"range", label:"decay",   min:0.005, max:2, step:0.005, value:0.18, fmt:v => (v*1000).toFixed(0)+" ms", apply:v => m.state.d = +v },
+    { id:"s", kind:"range", label:"sustain", min:0, max:1, step:0.01, value:0.25, fmt:v => (+v).toFixed(2), apply:v => m.state.s = +v },
+    { id:"r", kind:"range", label:"release", min:0.01, max:3, step:0.01, value:0.3, fmt:v => (v*1000).toFixed(0)+" ms", apply:v => m.state.r = +v },
+    { id:"amt", kind:"range", label:"amount", min:0, max:4000, step:1, value:1, fmt:v => (+v).toFixed(0), apply:v => amt.gain.setTargetAtTime(+v, ac.currentTime, 0.01) },
+  ];
+  m.trigger = (t, dur) => {
+    const p = cs.offset, S = m.state;
+    p.cancelScheduledValues(t);
+    p.setValueAtTime(Math.max(0.0001, p.value), t);
+    p.linearRampToValueAtTime(1, t + S.a);
+    p.linearRampToValueAtTime(S.s, t + S.a + S.d);
+    const off = t + Math.max(dur, S.a + 0.01);
+    p.setValueAtTime(Math.max(S.s, 0.0001), off);
+    p.linearRampToValueAtTime(0, off + S.r);
+  };
+  m.ins  = [{ id:"gate", label:"gate", kind:"trig" }];
+  m.outs = [{ id:"out", label:"cv", kind:"cv", node:() => amt }];
+});
+
+def("clock", "Clock", m => {
+  m.state = { bpm:124, div:4, step:0, nextAt:0 };
+  m.controls = [
+    { id:"bpm", kind:"range", label:"tempo", min:50, max:190, step:1, value:124, fmt:v => v+" bpm", apply:v => m.state.bpm = +v },
+    { id:"div", kind:"select", label:"division", options:["1/4","1/8","1/16"], apply:v => m.state.div = ({"1/4":1,"1/8":2,"1/16":4})[v] },
+  ];
+  m.ins = [];
+  m.outs = [{ id:"out", label:"trig", kind:"trig" }];
+});
+
+def("seq", "Sequencer", m => {
+  const cs = ac.createConstantSource(); cs.offset.value = 0; cs.start();
+  m.nodes = { cs };
+  m.state = { steps:[0,0,12,0,7,0,3,10], on:[1,0,1,1,1,0,1,1], cur:0 };
+  m.controls = [
+    { id:"range", kind:"range", label:"spread", min:0, max:24, step:1, value:12, fmt:v => "±"+v+" st", apply:v => m.state.range = +v },
+    { id:"glide", kind:"range", label:"glide", min:0, max:0.3, step:0.005, value:0.01, fmt:v => (v*1000).toFixed(0)+" ms", apply:v => m.state.glide = +v },
+  ];
+  m.state.range = 12; m.state.glide = 0.01;
+  m.advance = t => {
+    const s = m.state;
+    s.cur = (s.cur + 1) % 8;
+    if(!s.on[s.cur]) return false;
+    const cents = s.steps[s.cur]*100;
+    cs.offset.setTargetAtTime(cents, t, Math.max(0.001, s.glide));
+    return true;
+  };
+  m.grid = true;
+  m.ins  = [{ id:"clk", label:"clk", kind:"trig" }];
+  m.outs = [{ id:"cv", label:"cv", kind:"cv", node:() => cs },
+            { id:"trig", label:"trig", kind:"trig" }];
+});
+
+def("delay", "Delay", m => {
+  const d = ac.createDelay(2); d.delayTime.value = 0.28;
+  const fb = ac.createGain(); fb.gain.value = 0.38;
+  const wet = ac.createGain(); wet.gain.value = 0.4;
+  const inG = ac.createGain(), out = ac.createGain();
+  inG.connect(out); inG.connect(d); d.connect(fb); fb.connect(d); d.connect(wet); wet.connect(out);
+  m.nodes = { d, fb, wet, inG, out };
+  m.controls = [
+    { id:"time", kind:"range", label:"time", min:0.01, max:1.2, step:0.005, value:0.28, fmt:v => (v*1000).toFixed(0)+" ms", apply:v => d.delayTime.setTargetAtTime(+v, ac.currentTime, 0.05) },
+    { id:"fb", kind:"range", label:"feedback", min:0, max:0.92, step:0.01, value:0.38, fmt:v => (v*100).toFixed(0)+"%", apply:v => fb.gain.setTargetAtTime(+v, ac.currentTime, 0.02) },
+    { id:"mix", kind:"range", label:"mix", min:0, max:1, step:0.01, value:0.4, fmt:v => (v*100).toFixed(0)+"%", apply:v => wet.gain.setTargetAtTime(+v, ac.currentTime, 0.02) },
+  ];
+  m.ins  = [{ id:"in", label:"in", kind:"audio", target:() => inG }];
+  m.outs = [{ id:"out", label:"out", kind:"audio", node:() => out }];
+});
+
+def("reverb", "Reverb", m => {
+  const c = ac.createConvolver();
+  const secs = 2.4, len = ac.sampleRate*secs, ir = ac.createBuffer(2, len, ac.sampleRate);
+  for(let ch=0; ch<2; ch++){
+    const d = ir.getChannelData(ch);
+    for(let i=0;i<len;i++) d[i] = (Math.random()*2-1) * Math.pow(1 - i/len, 2.6);
+  }
+  c.buffer = ir;
+  const inG = ac.createGain(), wet = ac.createGain(), out = ac.createGain();
+  wet.gain.value = 0.35;
+  inG.connect(out); inG.connect(c); c.connect(wet); wet.connect(out);
+  m.nodes = { c, wet, inG, out };
+  m.controls = [{ id:"mix", kind:"range", label:"mix", min:0, max:1, step:0.01, value:0.35,
+    fmt:v => (v*100).toFixed(0)+"%", apply:v => wet.gain.setTargetAtTime(+v, ac.currentTime, 0.03) }];
+  m.ins  = [{ id:"in", label:"in", kind:"audio", target:() => inG }];
+  m.outs = [{ id:"out", label:"out", kind:"audio", node:() => out }];
+});
+
+def("out", "Output", m => {
+  const g = ac.createGain(); g.gain.value = 0.7;
+  const an = ac.createAnalyser(); an.fftSize = 2048;
+  g.connect(an); g.connect(master);
+  m.nodes = { g, an };
+  m.controls = [{ id:"vol", kind:"range", label:"volume", min:0, max:1, step:0.01, value:0.7,
+    fmt:v => (v*100).toFixed(0)+"%", apply:v => g.gain.setTargetAtTime(+v, ac.currentTime, 0.02) }];
+  m.scope = true;
+  m.ins  = [{ id:"in", label:"in", kind:"audio", target:() => g }];
+  m.outs = [];
+});
+
+/* ---------- graph state ---------- */
+let mods = [], cables = [], uid = 1;
+const byId = id => mods.find(m => m.id === id);
+
+function addModule(type, x, y){
+  const d = DEFS[type];
+  const m = { id:"m"+(uid++), type, label:d.label, x, y, ins:[], outs:[], controls:[] };
+  d.build(m);
+  mods.push(m);
+  renderModule(m);
+  m.controls.forEach(c => c.apply(c.kind === "select" ? (c.options[0]) : c.value));
+  refresh();
+  return m;
+}
+function removeModule(id){
+  cables = cables.filter(c => {
+    if(c.from[0] === id || c.to[0] === id){ disconnect(c); return false; }
+    return true;
+  });
+  const m = byId(id);
+  if(m){
+    Object.values(m.nodes || {}).forEach(n => { try{ n.disconnect(); }catch(e){} });
+    m.el.remove();
+    mods = mods.filter(x => x.id !== id);
+  }
+  refresh();
+}
+function portOf(mid, pid, dir){
+  const m = byId(mid); if(!m) return null;
+  return (dir === "out" ? m.outs : m.ins).find(p => p.id === pid) || null;
+}
+function connect(c){
+  const src = portOf(c.from[0], c.from[1], "out"), dst = portOf(c.to[0], c.to[1], "in");
+  if(!src || !dst) return false;
+  if(src.kind === "trig" || dst.kind === "trig") return true;   // triggers are scheduled, not wired
+  try { src.node().connect(dst.target()); return true; }
+  catch(e){ return false; }
+}
+function disconnect(c){
+  const src = portOf(c.from[0], c.from[1], "out"), dst = portOf(c.to[0], c.to[1], "in");
+  if(!src || !dst || src.kind === "trig" || dst.kind === "trig") return;
+  try { src.node().disconnect(dst.target()); } catch(e){}
+}
+function addCable(from, to){
+  const a = portOf(from[0], from[1], "out"), b = portOf(to[0], to[1], "in");
+  if(!a || !b) return false;
+  if(from[0] === to[0]) return false;
+  const trigA = a.kind === "trig", trigB = b.kind === "trig";
+  if(trigA !== trigB) return false;                       // a trigger only meets a trigger
+  if(cables.some(c => c.from[0]===from[0] && c.from[1]===from[1] && c.to[0]===to[0] && c.to[1]===to[1])) return false;
+  const c = { id:"c"+(uid++), from, to, kind: trigA ? "trig" : (b.kind === "cv" ? "cv" : a.kind) };
+  if(!connect(c)) return false;
+  cables.push(c);
+  refresh();
+  return true;
+}
+
+/* ---------- DOM ---------- */
+function renderModule(m){
+  const el = document.createElement("div");
+  el.className = "mod"; el.style.left = m.x+"px"; el.style.top = m.y+"px";
+  el.innerHTML = '<header><b>'+m.label+'</b><span class="x" title="remove">✕</span></header><div class="body"></div>';
+  const body = el.querySelector(".body");
+
+  if(m.grid){
+    const g = document.createElement("div"); g.className = "seq";
+    m.state.on.forEach((on,i) => {
+      const b = document.createElement("button");
+      b.textContent = m.state.steps[i];
+      b.className = on ? "on" : "";
+      b.onclick = e => {
+        if(e.shiftKey){ m.state.steps[i] = (m.state.steps[i] + 1) % 25; }
+        else m.state.on[i] = m.state.on[i] ? 0 : 1;
+        b.className = m.state.on[i] ? "on" : "";
+        b.textContent = m.state.steps[i];
+      };
+      b.oncontextmenu = e => { e.preventDefault(); m.state.steps[i] = (m.state.steps[i] + 24) % 25; b.textContent = m.state.steps[i]; };
+      g.appendChild(b);
+    });
+    body.appendChild(g);
+    m.gridEl = g;
+  }
+
+  m.controls.forEach(c => {
+    const w = document.createElement("div"); w.className = "ctl";
+    if(c.kind === "select"){
+      w.innerHTML = '<label>'+c.label+'</label>';
+      const s = document.createElement("select");
+      c.options.forEach(o => { const op = document.createElement("option"); op.value = op.textContent = o; s.appendChild(op); });
+      s.onchange = () => c.apply(s.value);
+      w.appendChild(s);
+    } else {
+      w.innerHTML = '<label>'+c.label+'<b>'+c.fmt(c.value)+'</b></label>';
+      const r = document.createElement("input");
+      r.type = "range"; r.min = c.min; r.max = c.max; r.step = c.step; r.value = c.value;
+      r.oninput = () => { c.value = +r.value; w.querySelector("b").textContent = c.fmt(+r.value); c.apply(+r.value); };
+      w.appendChild(r);
+    }
+    body.appendChild(w);
+  });
+
+  if(m.scope){
+    const cv = document.createElement("canvas"); cv.className = "scope"; body.appendChild(cv); m.scopeEl = cv;
+  }
+
+  const ports = document.createElement("div"); ports.className = "ports";
+  const mk = (list, dir) => {
+    const col = document.createElement("div"); col.className = "pcol " + dir;
+    list.forEach(p => {
+      const row = document.createElement("div"); row.className = "port";
+      const j = document.createElement("div"); j.className = "jack";
+      j.dataset.kind = p.kind; j.dataset.mod = m.id; j.dataset.port = p.id; j.dataset.dir = dir;
+      row.appendChild(j);
+      const t = document.createElement("span"); t.textContent = p.label; row.appendChild(t);
+      col.appendChild(row);
+    });
+    return col;
+  };
+  ports.appendChild(mk(m.ins, "in"));
+  ports.appendChild(mk(m.outs, "out"));
+  if(m.ins.length || m.outs.length) el.appendChild(ports);
+
+  el.querySelector(".x").onclick = e => { e.stopPropagation(); removeModule(m.id); };
+
+  // dragging the header moves the module; cables follow because they are redrawn
+  const head = el.querySelector("header");
+  head.addEventListener("pointerdown", e => {
+    if(e.target.classList.contains("x")) return;
+    const ox = e.clientX - m.x, oy = e.clientY - m.y;
+    head.setPointerCapture(e.pointerId);
+    el.classList.add("sel");
+    const move = ev => {
+      m.x = Math.max(4, Math.min(rack.clientWidth - el.offsetWidth - 4, ev.clientX - ox));
+      m.y = Math.max(4, Math.min(rack.clientHeight - el.offsetHeight - 4, ev.clientY - oy));
+      el.style.left = m.x+"px"; el.style.top = m.y+"px";
+      drawCables();
+    };
+    const up = () => {
+      head.removeEventListener("pointermove", move);
+      head.removeEventListener("pointerup", up);
+      el.classList.remove("sel");
+    };
+    head.addEventListener("pointermove", move);
+    head.addEventListener("pointerup", up);
+  });
+
+  rack.appendChild(el);
+  m.el = el;
+}
+
+/* ---------- cable dragging ---------- */
+let dragFrom = null, dragPos = null;
+rack.addEventListener("pointerdown", e => {
+  const j = e.target.closest(".jack");
+  if(!j) return;
+  e.preventDefault();
+  dragFrom = { mod:j.dataset.mod, port:j.dataset.port, dir:j.dataset.dir, kind:j.dataset.kind, el:j };
+  j.classList.add("lit");
+  dragPos = local(e);
+  drawCables();
+});
+window.addEventListener("pointermove", e => { if(dragFrom){ dragPos = local(e); drawCables(); } });
+window.addEventListener("pointerup", e => {
+  if(!dragFrom) return;
+  const el = document.elementFromPoint(e.clientX, e.clientY);
+  const j = el && el.closest ? el.closest(".jack") : null;
+  if(j && j.dataset.dir !== dragFrom.dir){
+    const from = dragFrom.dir === "out" ? [dragFrom.mod, dragFrom.port] : [j.dataset.mod, j.dataset.port];
+    const to   = dragFrom.dir === "out" ? [j.dataset.mod, j.dataset.port] : [dragFrom.mod, dragFrom.port];
+    if(!addCable(from, to)) flash("those two jacks do not go together");
+  }
+  dragFrom.el.classList.remove("lit");
+  dragFrom = null; dragPos = null;
+  drawCables();
+});
+function local(e){
+  const r = rack.getBoundingClientRect();
+  return { x:e.clientX - r.left, y:e.clientY - r.top };
+}
+function jackPos(mid, pid, dir){
+  const m = byId(mid); if(!m) return null;
+  const j = m.el.querySelector('.jack[data-port="'+pid+'"][data-dir="'+dir+'"]');
+  if(!j) return null;
+  const r = j.getBoundingClientRect(), rr = rack.getBoundingClientRect();
+  return { x:r.left - rr.left + r.width/2, y:r.top - rr.top + r.height/2 };
+}
+const COL = { audio:"#e8552f", cv:"#2f7de8", trig:"#e8b32f" };
+function drawCables(){
+  svg.setAttribute("width", rack.clientWidth);
+  svg.setAttribute("height", rack.clientHeight);
+  let out = "";
+  cables.forEach(c => {
+    const a = jackPos(c.from[0], c.from[1], "out"), b = jackPos(c.to[0], c.to[1], "in");
+    if(!a || !b) return;
+    const sag = Math.min(120, 30 + Math.hypot(b.x-a.x, b.y-a.y)*0.28);
+    const d = "M"+a.x+" "+a.y+" C"+(a.x+40)+" "+(a.y+sag)+" "+(b.x-40)+" "+(b.y+sag)+" "+b.x+" "+b.y;
+    out += '<path d="'+d+'" stroke="rgba(0,0,0,.28)" stroke-width="6" fill="none" transform="translate(1,2)"/>';
+    out += '<path class="cable" data-id="'+c.id+'" d="'+d+'" stroke="'+COL[c.kind]+'" stroke-width="3.4" fill="none" stroke-linecap="round" style="pointer-events:stroke;cursor:pointer"/>';
+    out += '<path d="'+d+'" stroke="rgba(255,255,255,.35)" stroke-width="1" fill="none"/>';
+  });
+  if(dragFrom && dragPos){
+    const a = jackPos(dragFrom.mod, dragFrom.port, dragFrom.dir) || dragPos;
+    const sag = Math.min(120, 30 + Math.hypot(dragPos.x-a.x, dragPos.y-a.y)*0.28);
+    out += '<path d="M'+a.x+' '+a.y+' C'+(a.x+40)+' '+(a.y+sag)+' '+(dragPos.x-40)+' '+(dragPos.y+sag)+' '+dragPos.x+' '+dragPos.y+
+           '" stroke="'+COL[dragFrom.kind]+'" stroke-width="3" fill="none" stroke-dasharray="6 5" opacity=".85"/>';
+  }
+  svg.innerHTML = out;
+  svg.querySelectorAll(".cable").forEach(p => {
+    p.onclick = () => {
+      const c = cables.find(x => x.id === p.dataset.id);
+      if(c){ disconnect(c); cables = cables.filter(x => x !== c); refresh(); }
+    };
+  });
+}
+function refresh(){ drawCables(); $("count").textContent = mods.length+" modules · "+cables.length+" cables"; }
+let flashT = null;
+function flash(msg){
+  $("hint").textContent = msg;
+  clearTimeout(flashT);
+  flashT = setTimeout(() => $("hint").textContent = "drag a jack to another jack to patch · click a cable to cut it", 2200);
+}
+
+/* ---------- clock: schedules triggers down the trigger cables ---------- */
+function tickClock(){
+  if(!running) return;
+  const now = ac.currentTime, horizon = now + 0.15;
+  mods.filter(m => m.type === "clock").forEach(cl => {
+    const s = cl.state;
+    const interval = 60/s.bpm/s.div;
+    if(!s.nextAt || s.nextAt < now) s.nextAt = now + 0.05;
+    while(s.nextAt < horizon){
+      fireTrigger(cl.id, "out", s.nextAt, interval*0.7);
+      s.nextAt += interval;
+    }
+  });
+}
+function fireTrigger(modId, portId, at, dur){
+  cables.filter(c => c.kind === "trig" && c.from[0] === modId && c.from[1] === portId).forEach(c => {
+    const t = byId(c.to[0]);
+    if(!t) return;
+    if(t.type === "env"){ t.trigger(at, dur); }
+    else if(t.type === "seq"){
+      const played = t.advance(at);
+      if(played) setTimeout(() => fireTrigger(t.id, "trig", at, dur), Math.max(0, (at - ac.currentTime)*1000));
+      if(t.gridEl) setTimeout(() => {
+        [...t.gridEl.children].forEach((b,i) => b.classList.toggle("cur", i === t.state.cur));
+      }, Math.max(0, (at - ac.currentTime)*1000));
+    }
+  });
+}
+
+/* ---------- scope ---------- */
+function drawScopes(){
+  mods.filter(m => m.scopeEl).forEach(m => {
+    const c = m.scopeEl, d = window.devicePixelRatio||1;
+    const w = c.clientWidth*d, h = 52*d;
+    if(c.width !== w){ c.width = w; c.height = h; }
+    const x = c.getContext("2d");
+    x.fillStyle = "#12171c"; x.fillRect(0,0,w,h);
+    const an = m.nodes.an, buf = new Float32Array(an.fftSize);
+    an.getFloatTimeDomainData(buf);
+    x.strokeStyle = "#e8552f"; x.lineWidth = 1.4*d; x.beginPath();
+    for(let i=0;i<buf.length;i++){
+      const px = i/buf.length*w, py = h/2 - buf[i]*h*0.44;
+      i ? x.lineTo(px,py) : x.moveTo(px,py);
+    }
+    x.stroke();
+    x.strokeStyle = "rgba(255,255,255,.1)"; x.lineWidth = 1*d;
+    x.beginPath(); x.moveTo(0,h/2); x.lineTo(w,h/2); x.stroke();
+  });
+}
+function loop(){ requestAnimationFrame(loop); if(running) tickClock(); drawScopes(); }
+
+/* ---------- presets ---------- */
+function wipe(){
+  [...mods].forEach(m => removeModule(m.id));
+  mods = []; cables = []; svg.innerHTML = "";
+}
+function buildPatch(spec){
+  ensure();
+  wipe();
+  const made = {};
+  spec.modules.forEach(([key, type, x, y, sets]) => {
+    const m = addModule(type, x, y);
+    made[key] = m;
+    if(sets) Object.entries(sets).forEach(([cid, val]) => {
+      const c = m.controls.find(c => c.id === cid);
+      if(!c) return;
+      if(c.kind === "select"){
+        c.apply(val);
+        const sel = m.el.querySelectorAll("select");
+        sel.forEach(s => { if([...s.options].some(o => o.value === val)) s.value = val; });
+      } else {
+        c.value = val; c.apply(val);
+        const idx = m.controls.filter(k => k.kind !== "select").indexOf(c);
+        const ranges = m.el.querySelectorAll('input[type=range]');
+        if(ranges[idx]){ ranges[idx].value = val; ranges[idx].previousElementSibling.querySelector("b").textContent = c.fmt(val); }
+      }
+    });
+    if(sets && sets.__steps) m.state.steps = sets.__steps.slice();
+  });
+  spec.cables.forEach(([fk, fp, tk, tp]) => addCable([made[fk].id, fp], [made[tk].id, tp]));
+  refresh();
+}
+const PRESETS = {
+  p1: { modules:[["o","osc",24,18,{wave:"sawtooth",freq:45}],["f","filter",232,18,{cut:3.1,q:6}],
+                 ["v","vca",440,18],["e","env",648,18,{a:0.005,d:0.22,s:0.2,r:0.25}],
+                 ["c","clock",856,18,{bpm:120}],["out","out",1040,18]],
+        cables:[["o","out","f","in"],["f","out","v","in"],["v","out","out","in"],["e","out","v","cv"],["c","out","e","gate"]] },
+  p2: { modules:[["c","clock",24,18,{bpm:132,div:"1/16"}],["s","seq",232,18],["o","osc",24,240,{wave:"sawtooth",freq:33}],
+                 ["f","filter",232,240,{cut:2.55,q:17}],["e","env",440,240,{a:0.003,d:0.12,s:0.05,r:0.1,amt:2400}],
+                 ["ev","env",648,240,{a:0.003,d:0.16,s:0.1,r:0.12}],["v","vca",856,240],["d","delay",856,18,{time:0.19,fb:0.44,mix:0.3}],
+                 ["out","out",1040,240]],
+        cables:[["c","out","s","clk"],["s","cv","o","fm"],["o","out","f","in"],["f","out","v","in"],
+                ["s","trig","e","gate"],["s","trig","ev","gate"],["e","out","f","cut"],["ev","out","v","cv"],
+                ["v","out","d","in"],["d","out","out","in"]] },
+  p3: { modules:[["o","osc",24,18,{wave:"triangle",freq:33,lvl:0.3}],["o2","osc",24,240,{wave:"sawtooth",freq:45,fine:7,lvl:0.18}],
+                 ["n","noise",232,240,{lvl:0.05}],["l","lfo",232,18,{rate:-0.9,amt:420}],
+                 ["f","filter",440,18,{cut:2.5,q:4}],["r","reverb",648,18,{mix:0.55}],["v","vca",856,18,{bias:0.5}],["out","out",1040,18]],
+        cables:[["o","out","f","in"],["o2","out","f","in"],["n","out","f","in"],["l","out","f","cut"],
+                ["f","out","r","in"],["r","out","v","in"],["v","out","out","in"]] },
+  p4: { modules:[["c","clock",24,18,{bpm:96,div:"1/4"}],["o","osc",232,18,{wave:"sine",freq:69}],
+                 ["o2","osc",232,240,{wave:"sine",freq:81,fine:14,lvl:0.16}],["e","env",440,18,{a:0.002,d:1.2,s:0,r:1.4}],
+                 ["v","vca",648,18],["r","reverb",856,18,{mix:0.6}],["out","out",1040,18]],
+        cables:[["c","out","e","gate"],["o","out","v","in"],["o2","out","v","in"],["e","out","v","cv"],
+                ["v","out","r","in"],["r","out","out","in"]] },
+};
+
+/* ---------- wiring ---------- */
+function ensure(){
+  if(ac) return;
+  ac = new (window.AudioContext||window.webkitAudioContext)();
+  master = ac.createGain(); master.gain.value = 0.0;
+  const lim = ac.createDynamicsCompressor();
+  lim.threshold.value = -6; lim.ratio.value = 14; lim.attack.value = 0.003;
+  master.connect(lim).connect(ac.destination);
+}
+$("power").onclick = e => {
+  ensure();
+  if(ac.state === "suspended") ac.resume();
+  running = !running;
+  master.gain.setTargetAtTime(running ? 0.9 : 0, ac.currentTime, 0.02);
+  e.target.classList.toggle("on", running);
+  e.target.textContent = running ? "Running" : "Power";
+  if(running) mods.filter(m => m.type === "clock").forEach(c => c.state.nextAt = 0);
+};
+const addSel = $("add");
+Object.values(DEFS).forEach(d => { const o = document.createElement("option"); o.value = d.type; o.textContent = d.label; addSel.appendChild(o); });
+$("addbtn").onclick = () => {
+  ensure();
+  const n = mods.length;
+  addModule(addSel.value, 24 + (n%6)*208, 18 + Math.floor(n/6)*222);
+};
+["p1","p2","p3","p4"].forEach(k => $(k).onclick = () => { buildPatch(PRESETS[k]); if(!running) $("power").click(); });
+$("clear").onclick = () => { cables.forEach(disconnect); cables = []; refresh(); };
+window.addEventListener("resize", drawCables);
+
+buildPatch(PRESETS.p1);
+loop();
+</script>
+</body>
+</html>
